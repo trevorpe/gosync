@@ -17,13 +17,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-import sys, os, wx, GoSyncController, GoSyncModel
-from os.path import expanduser, dirname, relpath
+import sys
+import os
+import wx
+
 from GoSyncController import GoSyncController
 from defines import *
 
 # Add the current path to gosync path.
 sys.path.insert(0, APP_PATH)
+
 
 def main():
     os.chdir(APP_PATH)
@@ -32,6 +35,7 @@ def main():
     controller.Center()
     controller.Show()
     app.MainLoop()
+
 
 if __name__ == "__main__":
     main()

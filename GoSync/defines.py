@@ -16,7 +16,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-import os,sys
+import os
+import sys
 
 APP_LICENSE = """GoSync is an open source Google Drive(TM) client written in python
 
@@ -42,9 +43,9 @@ APP_WEBSITE = 'http://www.nulltrace.org/p/gosync.html'
 APP_COPYRIGHT = '(c) 2015 - 2022 Himanshu Chauhan'
 APP_DESCRIPTION = 'GoSync is an open source Google Drive client written in python.'
 APP_CONFIG_FILE_NAME = 'gosyncrc'
-CLIENT_SECRET_HELP_SITE='https://github.com/jay0lee/GAM/wiki/Creating-client_secrets.json-and-oauth2service.json'
+CLIENT_SECRET_HELP_SITE = 'https://github.com/jay0lee/GAM/wiki/Creating-client_secrets.json-and-oauth2service.json'
 APP_PATH = os.path.abspath(os.path.dirname(os.path.join(sys.argv[0])))
-HERE=os.path.abspath(os.path.dirname(__file__))
+HERE = os.path.abspath(os.path.dirname(__file__))
 INI_FILE = os.path.join(APP_PATH, "gosync.ini")
 
 TRAY_TOOLTIP = 'GoSync - A Google Drive Client for Linux'

@@ -1,7 +1,8 @@
 from GoSync.defines import *
 from codecs import open
 from os import path
-from setuptools import setup, find_packages
+from setuptools import find_packages
+from setuptools import setup
 
 
 here = path.abspath(path.dirname(__file__))
@@ -11,13 +12,13 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name = APP_NAME,
-    version = APP_VERSION,
-    description = APP_DESCRIPTION,
-    long_description = long_description,
-    url = APP_WEBSITE,
-    author = APP_DEVELOPER,
-    author_email = APP_DEVELOPER_EMAIL,
+    name=APP_NAME,
+    version=APP_VERSION,
+    description=APP_DESCRIPTION,
+    long_description=long_description,
+    url=APP_WEBSITE,
+    author=APP_DEVELOPER,
+    author_email=APP_DEVELOPER_EMAIL,
     license='GPL',
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -30,12 +31,12 @@ setup(
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
 
     package_data={
-        'GoSync':['resources/*.png'],
+        'GoSync': ['resources/*.png'],
     },
 
     install_requires=['google-api-python-client', 'pydrive', 'watchdog'],
     entry_points={
-        'console_scripts':[
+        'console_scripts': [
             'GoSync=GoSync.GoSync:main',
         ],
     },

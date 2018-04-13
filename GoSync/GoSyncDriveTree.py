@@ -18,6 +18,7 @@
 
 import os
 
+
 class DriveFolder(object):
     def __init__(self, parent, id, name, data=None):
         self.children = []
@@ -33,7 +34,7 @@ class DriveFolder(object):
         return self.data
 
     def GetParent(self):
-        return parent
+        return self.parent
 
     def GetId(self):
         return self.id
@@ -51,7 +52,7 @@ class DriveFolder(object):
         return self.children
 
     def GetPath(self):
-        cpath =''
+        cpath = ''
         if self.parent is not None:
             cpath = self.parent.GetPath()
 
@@ -74,7 +75,7 @@ class GoogleDriveTree(object):
         for f in parent.GetChildren():
             if f.GetId() == id:
                 return f
-            
+
             ret = self.FindFolderInParent(f, id)
             if ret:
                 return ret

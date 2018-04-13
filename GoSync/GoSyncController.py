@@ -16,14 +16,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-import wx, os, time
-import sys, os, wx, ntpath, defines, threading, math, webbrowser
-from GoSyncModel import GoSyncModel, ClientSecretsNotFound
-from defines import *
-from threading import Timer
+import sys
+import os
+import wx
+import math
+import webbrowser
+
 from DriveUsageBox import DriveUsageBox
 from GoSyncEvents import *
+from GoSyncModel import ClientSecretsNotFound
+from GoSyncModel import GoSyncModel
 from GoSyncSettingsPage import SettingsPage
+from defines import *
 
 ID_SYNC_TOGGLE = wx.NewId()
 
@@ -38,8 +42,11 @@ class PageAccount(wx.Panel):
         self.totalFiles = 0
 
         aboutdrive = sync_model.DriveInfo()
-        self.driveUsageBar = DriveUsageBox(self, long(aboutdrive['quotaBytesTotal']), -1)
-        self.driveUsageBar.SetStatusMessage("Calculating your categorical Google Drive usage. Please wait.")
+        self.driveUsageBar = DriveUsageBox(self,
+                                           long(aboutdrive['quotaBytesTotal']),
+                                           -1)
+        self.driveUsageBar.SetStatusMessage("Calculating your categorical "
+                                            "Google Drive usage. Please wait.")
         self.driveUsageBar.SetMoviesUsage(0)
         self.driveUsageBar.SetDocumentUsage(0)
         self.driveUsageBar.SetOthersUsage(0)
@@ -61,7 +68,9 @@ class PageAccount(wx.Panel):
 
     def OnUsageCalculationDone(self, event):
         if not event.data:
-            self.driveUsageBar.SetStatusMessage("Your Google Drive usage is shown below:")
+            self.driveUsageBar.SetStatusMessage(
+                "Your Google Drive usage is shown below:"
+            )
             self.driveUsageBar.SetMoviesUsage(self.sync_model.GetMovieUsage())
             self.driveUsageBar.SetDocumentUsage(self.sync_model.GetDocumentUsage())
             self.driveUsageBar.SetOthersUsage(self.sync_model.GetOthersUsage())
@@ -69,25 +78,38 @@ class PageAccount(wx.Panel):
             self.driveUsageBar.SetPhotoUsage(self.sync_model.GetPhotoUsage())
             self.driveUsageBar.RePaint()
         else:
-            self.driveUsageBar.SetStatusMessage("Sorry, could not calculate your Google Drive usage.")
+            self.driveUsageBar.SetStatusMessage(
+                "Sorry, could not calculate your Google Drive usage."
+            )
 
     def OnUsageCalculationUpdate(self, event):
         percent = (event.data * 100)/self.totalFiles
-        self.driveUsageBar.SetStatusMessage("Calculating your categorical usage... (%d%%)\n" % percent)
+        self.driveUsageBar.SetStatusMessage(
+            "Calculating your categorical usage... (%d%%)\n" % percent
+        )
 
     def OnUsageCalculationStarted(self, event):
         self.totalFiles = event.data
-        self.driveUsageBar.SetStatusMessage("Calculating your categorical Google Drive usage. Please wait.")
+        self.driveUsageBar.SetStatusMessage(
+            "Calculating your categorical Google Drive usage. Please wait."
+        )
 
 class GoSyncController(wx.Frame):
     def __init__(self):
-        wx.Frame.__init__(self, None, title="GoSync", size=(520,400), style=mainWindowStyle)
+        wx.Frame.__init__(self,
+                          None,
+                          title="GoSync",
+                          size=(520,400),
+                          style=mainWindowStyle)
 
         try:
             self.sync_model = GoSyncModel()
         except ClientSecretsNotFound:
-            dial = wx.MessageDialog(None, 'Client secret file was not found!\n\nDo you want to know how to create one?\n',
-                                    'Error', wx.YES_NO | wx.ICON_EXCLAMATION)
+            dial = wx.MessageDialog(None,
+                                    'Client secret file was not found!'
+                                    '\n\nDo you want to know how to '
+                                    'create one?\nError',
+                                    wx.YES_NO | wx.ICON_EXCLAMATION)
             res = dial.ShowModal()
 
             if res == wx.ID_YES:
@@ -102,9 +124,11 @@ class GoSyncController(wx.Frame):
 
         self.aboutdrive = self.sync_model.DriveInfo()
 
-        title_string = "GoSync --%s (%s used of %s)" % (self.aboutdrive['name'],
-                                                        self.FileSizeHumanize(long(self.aboutdrive['quotaBytesUsed'])),
-                                                        self.FileSizeHumanize(long(self.aboutdrive['quotaBytesTotal'])))
+        title_string = "GoSync --%s (%s used of %s)" % (
+            self.aboutdrive['name'],
+            self.FileSizeHumanize(long(self.aboutdrive['quotaBytesUsed'])),
+            self.FileSizeHumanize(long(self.aboutdrive['quotaBytesTotal']))
+        )
         self.SetTitle(title_string)
         appIcon = wx.Icon(APP_ICON, wx.BITMAP_TYPE_PNG)
         self.SetIcon(appIcon)
@@ -113,11 +137,17 @@ class GoSyncController(wx.Frame):
 
         menu_txt = 'Pause/Resume Sync'
 
-        self.CreateMenuItem(menu, menu_txt, self.OnToggleSync, icon=os.path.join(HERE, 'resources/sync-menu.png'), id=ID_SYNC_TOGGLE)
+        self.CreateMenuItem(menu,
+                            menu_txt,
+                            self.OnToggleSync,
+                            icon=os.path.join(HERE, 'resources/sync-menu.png'),
+                            id=ID_SYNC_TOGGLE)
 
         menu.AppendSeparator()
-        self.CreateMenuItem(menu, 'A&bout', self.OnAbout, os.path.join(HERE, 'resources/info.png'))
-        self.CreateMenuItem(menu, 'E&xit', self.OnExit, os.path.join(HERE, 'resources/exit.png'))
+        self.CreateMenuItem(menu, 'A&bout', self.OnAbout,
+                            os.path.join(HERE, 'resources/info.png'))
+        self.CreateMenuItem(menu, 'E&xit', self.OnExit,
+                            os.path.join(HERE, 'resources/exit.png'))
 
         menuBar.Append(menu, '&File')
 
@@ -163,9 +193,13 @@ class GoSyncController(wx.Frame):
         self.sync_model.SetTheBallRolling()
 
     def OnSyncInvalidFolder(self, event):
-        dial = wx.MessageDialog(None, 'Some of the folders to be sync\'ed were not found on remote server.\nPlease check.\n',
-                                'Error', wx.OK | wx.ICON_EXCLAMATION)
-        res = dial.ShowModal()
+        dial = wx.MessageDialog(
+            None,
+            'Some of the folders to be sync\'ed were not found on '
+            'remote server.\nPlease check.\n',
+            'Error', wx.OK | wx.ICON_EXCLAMATION
+        )
+        dial.ShowModal()
 
     def OnSyncTimer(self, event):
         unicode_string = event.data.pop()
@@ -203,15 +237,19 @@ class GoSyncController(wx.Frame):
 
     def FileSizeHumanize(self, size):
         size = abs(size)
-        if (size==0):
+        if (size == 0):
             return "0B"
-        units = ['B','KB','MB','GB','TB','PB','EB','ZB','YB']
-        p = math.floor(math.log(size, 2)/10)
-        return "%.3f%s" % (size/math.pow(1024,p),units[int(p)])
+        units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        p = math.floor(math.log(size, 2) / 10)
+        return "%.3f%s" % (size / math.pow(1024, p), units[int(p)])
 
     def OnExit(self, event):
-        dial = wx.MessageDialog(None, 'GoSync will stop syncing files until restarted.\nAre you sure to quit?\n',
-                                'Question', wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION)
+        dial = wx.MessageDialog(
+            None,
+            'GoSync will stop syncing files until restarted.\n'
+            'Are you sure to quit?\n',
+            'Question', wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION
+        )
         res = dial.ShowModal()
         if res == wx.ID_YES:
             wx.CallAfter(self.Destroy)

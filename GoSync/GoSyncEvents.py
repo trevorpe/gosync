@@ -16,7 +16,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-import os, wx
+import wx
 
 GOSYNC_EVENT_CALCULATE_USAGE_STARTED = '_gosync_calculate_usage_started'
 GOSYNC_EVENT_CALCULATE_USAGE_UPDATE = '_gosync_calculate_usage_update'
@@ -36,12 +36,14 @@ GOSYNC_EVENT_ID_CALCULATE_USAGE_DONE = wx.NewId()
 GOSYNC_EVENT_ID_SYNC_TIMER = wx.NewId()
 GOSYNC_EVENT_ID_SYNC_INV_FOLDER = wx.NewId()
 
+
 class GoSyncEvent(wx.PyEvent):
     def __init__(self, event, data):
         wx.PyEvent.__init__(self)
 
         self.SetEventType(event)
         self.data = data
+
 
 # A singleton class for event passing between
 # different modules of GoSync
@@ -75,12 +77,13 @@ class GoSyncEventController(object):
         if self._sync_listeners[event] and \
                 self._sync_listeners[event]:
             for listener in self._sync_listeners[event]:
-                wx.PostEvent(listener, GoSyncEvent(self._sync_events[event], data))
+                wx.PostEvent(listener, GoSyncEvent(self._sync_events[event],
+                                                   data))
 
     def BindEvent(self, notify_object, event, func):
         if not notify_object:
             raise ValueError("Invalid notify object")
-    
+
         if not self._sync_events[event]:
             raise ValueError("Invalid event")
 

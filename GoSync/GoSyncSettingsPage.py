@@ -1,8 +1,8 @@
 import wx
 import wx.lib.agw.customtreectrl as CT
-from pydrive.drive import GoogleDrive
-from pydrive.auth import GoogleAuth
+
 from GoSyncEvents import *
+
 
 class GoSyncDriveTree(CT.CustomTreeCtrl):
     def __init__(self, parent, *args, **kw):
@@ -27,6 +27,7 @@ class GoSyncDriveTree(CT.CustomTreeCtrl):
 
         return checkedItems
 
+
 class SettingsPage(wx.Panel):
     def __init__(self, parent, sync_model):
         wx.Panel.__init__(self, parent)
@@ -34,9 +35,12 @@ class SettingsPage(wx.Panel):
         headerFont = wx.Font(11.5, wx.SWISS, wx.NORMAL, wx.NORMAL)
 
         self.sync_model = sync_model
-        self.dstc = GoSyncDriveTree(self, pos=(0,0))
+        self.dstc = GoSyncDriveTree(self, pos=(0, 0))
 
-        t1 = wx.StaticText(self, -1, "Choose the directories to sync:\n", pos=(0,0))
+        t1 = wx.StaticText(self,
+                           -1,
+                           "Choose the directories to sync:"
+                           "\n", pos=(0, 0))
         t1.SetFont(headerFont)
 
         self.cb = wx.CheckBox(self, -1, 'Sync Everything', (10, 10))
@@ -48,7 +52,8 @@ class SettingsPage(wx.Panel):
         btn.Bind(wx.EVT_BUTTON, self.RefreshTree)
         self.Bind(CT.EVT_TREE_ITEM_CHECKED, self.ItemChecked)
 
-        GoSyncEventController().BindEvent(self, GOSYNC_EVENT_CALCULATE_USAGE_DONE,
+        GoSyncEventController().BindEvent(self,
+                                          GOSYNC_EVENT_CALCULATE_USAGE_DONE,
                                           self.RefreshTree)
         wx.EVT_CHECKBOX(self, self.cb.GetId(), self.SyncSetting)
 
@@ -56,9 +61,8 @@ class SettingsPage(wx.Panel):
         sizer.Add(t1, 0, wx.ALL)
         sizer.Add(self.cb, 0, wx.ALL)
         sizer.Add(self.dstc, 1, wx.EXPAND)
-        sizer.Add(btn, 0, wx.ALL|wx.CENTER, 5)
+        sizer.Add(btn, 0, wx.ALL | wx.CENTER, 5)
         self.SetSizer(sizer)
-
 
     def SyncSetting(self, event):
         if self.cb.GetValue():
@@ -82,7 +86,8 @@ class SettingsPage(wx.Panel):
             self.dstc.SetPyData(nnode, f)
             self.MakeDriveTree(f, nnode)
 
-    def GetItemsToBeChecked(self, checklist, itemParent = None, itemToBeChecked = None):
+    def GetItemsToBeChecked(self, checklist, itemParent=None,
+                            itemToBeChecked=None):
         if itemParent is None:
             itemParent = self.dstc.GetRootItem()
 
@@ -97,7 +102,8 @@ class SettingsPage(wx.Panel):
                 if child_data.GetId() == d[1]:
                     itemToBeChecked.append(child)
 
-            itemToBeChecked = self.GetItemsToBeChecked(checklist, child, itemToBeChecked)
+            itemToBeChecked = self.GetItemsToBeChecked(checklist, child,
+                                                       itemToBeChecked)
             child, cookie = self.dstc.GetNextChild(itemParent, cookie)
 
         return itemToBeChecked
