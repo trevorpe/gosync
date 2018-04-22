@@ -82,6 +82,7 @@ image_file_mimelist = ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff']
 document_file_mimelist = ['application/powerpoint', 'applciation/mspowerpoint',
                           'application/x-mspowerpoint', 'application/pdf',
                           'application/x-dvi']
+google_folder_mime = 'application/vnd.google-apps.folder'
 google_docs_mimelist = ['application/vnd.google-apps.spreadsheet',
                         'application/vnd.google-apps.sites',
                         'application/vnd.google-apps.script',
@@ -136,16 +137,7 @@ class GoSyncModel(object):
 
         if not os.path.exists(self.settings_file) or \
                 not os.path.isfile(self.settings_file):
-            sfile = open(self.settings_file, 'w')
-            sfile.write("save_credentials: False")
-            sfile.write("\n")
-            sfile.write("save_credentials_file: ")
-            sfile.write(self.credential_file)
-            sfile.write("\n")
-            sfile.write('client_config_file: ' + self.client_secret_file
-                        + "\n")
-            sfile.write("save_credentials_backend: file\n")
-            sfile.close()
+            self.CreateDefaultSettingsFile()
 
         self.observer = Observer()
         self.DoAuthenticate()
@@ -163,10 +155,7 @@ class GoSyncModel(object):
         if not os.path.exists(self.config_file):
             self.CreateDefaultConfigFile()
 
-        try:
-            self.LoadConfig()
-        except:
-            raise
+        self.LoadConfig()
 
         self.iobserv_handle = self.observer.schedule(
             FileModificationNotifyHandler(self),
@@ -207,19 +196,29 @@ class GoSyncModel(object):
         return self.is_logged_in
 
     def HashOfFile(self, abs_filepath):
-        data = open(abs_filepath, "r").read()
+        with open(abs_filepath, "r") as f:
+            data = f.read()
         return hashlib.md5(data).hexdigest()
 
+    def CreateDefaultSettingsFile(self):
+        with open(self.settings_file, 'w') as sfile:
+            sfile.write("save_credentials: False\n")
+            sfile.write(
+                "save_credentials_file: %s\n" % self.credential_file
+            )
+            sfile.write(
+                'client_config_file: %s\n' % self.client_secret_file
+            )
+            sfile.write("save_credentials_backend: file\n")
+
     def CreateDefaultConfigFile(self):
-        f = open(self.config_file, 'w')
-        self.config_dict['Sync Selection'] = [['root', '']]
-        self.account_dict[self.user_email] = self.config_dict
-        json.dump(self.account_dict, f)
-        f.close()
+        with open(self.config_file, 'w') as f:
+            self.config_dict['Sync Selection'] = [['root', '']]
+            self.account_dict[self.user_email] = self.config_dict
+            json.dump(self.account_dict, f)
 
     def LoadConfig(self):
-        try:
-            f = open(self.config_file, 'r')
+        with open(self.config_file, 'r') as f:
             try:
                 self.config = json.load(f)
                 try:
@@ -235,27 +234,22 @@ class GoSyncModel(object):
                         self.driveDocumentUsage = self.drive_usage_dict['Document Size']
                         self.drivePhotoUsage = self.drive_usage_dict['Photo Size']
                         self.driveOthersUsage = self.drive_usage_dict['Others Size']
-                    except:
+                    except KeyError:
                         pass
-                except:
+                except KeyError:
                     pass
-
-                f.close()
             except:
                 raise ConfigLoadFailed()
-        except:
-            raise ConfigLoadFailed()
 
     def SaveConfig(self):
-        f = open(self.config_file, 'w')
-        f.truncate()
-        if not self.sync_selection:
-            self.config_dict['Sync Selection'] = [['root', '']]
+        with open(self.config_file, 'w') as f:
+            f.truncate()
+            if not self.sync_selection:
+                self.config_dict['Sync Selection'] = [['root', '']]
 
-        self.account_dict[self.user_email] = self.config_dict
+            self.account_dict[self.user_email] = self.config_dict
 
-        json.dump(self.account_dict, f)
-        f.close()
+            json.dump(self.account_dict, f)
 
     def DoAuthenticate(self):
         try:
@@ -264,11 +258,12 @@ class GoSyncModel(object):
             self.drive = GoogleDrive(self.authToken)
             self.is_logged_in = True
         except:
-            dial = wx.MessageDialog(None, "Authentication Rejected!\n",
-                                    'Information', wx.ID_OK | wx.ICON_EXCLAMATION)
+            dial = wx.MessageDialog(None,
+                                    "Authentication Rejected!\n",
+                                    'Information',
+                                    wx.ID_OK | wx.ICON_EXCLAMATION)
             dial.ShowModal()
             self.is_logged_in = False
-            pass
 
     def DoUnAuthenticate(self):
             self.do_sync = False
@@ -294,7 +289,7 @@ class GoSyncModel(object):
             {'q': "'%s' in parents and trashed=false" % parent}
         ).GetList()
         for f in file_list:
-            if f['title'] == folder_name and f['mimeType'] == 'application/vnd.google-apps.folder':
+            if f['title'] == folder_name and f['mimeType'] == google_folder_mime:
                 self.logger.debug("Found!\n")
                 return f
 
@@ -309,12 +304,9 @@ class GoSyncModel(object):
         dir_list = folder_path.split(os.sep)
         croot = 'root'
         for dir1 in dir_list:
-            try:
-                folder = self.GetFolderOnDrive(dir1, croot)
-                if not folder:
-                    raise FolderNotFound()
-            except:
-                raise
+            folder = self.GetFolderOnDrive(dir1, croot)
+            if not folder:
+                raise FolderNotFound()
 
             croot = folder['id']
 
@@ -332,7 +324,6 @@ class GoSyncModel(object):
             raise FileNotFound()
         except:
             raise FileNotFound()
-
 
     def LocateFileOnDrive(self, abs_filepath):
         dirpath = os.path.dirname(abs_filepath)
@@ -376,7 +367,7 @@ class GoSyncModel(object):
     def CreateDirectoryInParent(self, dirname, parent_id='root'):
         upfile = self.drive.CreateFile({
             'title': dirname,
-            'mimeType': 'application/vnd.google-apps.folder',
+            'mimeType': google_folder_mime,
             'parents': [{'kind': 'drive#fileLink', 'id': parent_id}]
         })
         upfile.Upload()
@@ -634,7 +625,7 @@ class GoSyncModel(object):
         try:
             file_list = self.MakeFileListQuery({'q': "'%s' in parents and trashed=false" % parent})
             for f in file_list:
-                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                if f['mimeType'] == google_folder_mime:
                     file_count += self.TotalFilesInFolder(f['id'])
                     file_count += 1
                 else:
@@ -692,7 +683,7 @@ class GoSyncModel(object):
                                       "paused. Aborting.\n")
                     return
 
-                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                if f['mimeType'] == google_folder_mime:
                     if not recursive:
                         continue
 
@@ -842,7 +833,7 @@ class GoSyncModel(object):
             for f in file_list:
                 self.fcount += 1
                 GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_UPDATE, self.fcount)
-                if f['mimeType'] == 'application/vnd.google-apps.folder':
+                if f['mimeType'] == google_folder_mime:
                     self.driveTree.AddFolder(folder_id, f['id'], f['title'], f)
                     self.calculateUsageOfFolder(f['id'])
                 else:

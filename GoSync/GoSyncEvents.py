@@ -74,11 +74,11 @@ class GoSyncEventController(object):
         return cls._event_controller_instance
 
     def PostEvent(self, event, data):
-        if self._sync_listeners[event] and \
-                self._sync_listeners[event]:
+        if self._sync_listeners[event]:
             for listener in self._sync_listeners[event]:
-                wx.PostEvent(listener, GoSyncEvent(self._sync_events[event],
-                                                   data))
+                wx.PostEvent(listener,
+                             GoSyncEvent(self._sync_events[event],
+                                         data))
 
     def BindEvent(self, notify_object, event, func):
         if not notify_object:

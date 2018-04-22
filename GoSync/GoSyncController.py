@@ -32,7 +32,8 @@ from defines import *
 ID_SYNC_TOGGLE = wx.NewId()
 
 mainWindowStyle = wx.DEFAULT_FRAME_STYLE & (~wx.CLOSE_BOX) & (~wx.MAXIMIZE_BOX)
-HERE=os.path.abspath(os.path.dirname(__file__))
+HERE = os.path.abspath(os.path.dirname(__file__))
+
 
 class PageAccount(wx.Panel):
     def __init__(self, parent, sync_model):
@@ -54,16 +55,18 @@ class PageAccount(wx.Panel):
         self.driveUsageBar.SetPhotoUsage(0)
         self.driveUsageBar.RePaint()
 
-
         mainsizer = wx.BoxSizer(wx.VERTICAL)
 
         self.SetSizerAndFit(mainsizer)
 
-        GoSyncEventController().BindEvent(self, GOSYNC_EVENT_CALCULATE_USAGE_STARTED,
+        GoSyncEventController().BindEvent(self,
+                                          GOSYNC_EVENT_CALCULATE_USAGE_STARTED,
                                           self.OnUsageCalculationStarted)
-        GoSyncEventController().BindEvent(self, GOSYNC_EVENT_CALCULATE_USAGE_DONE,
+        GoSyncEventController().BindEvent(self,
+                                          GOSYNC_EVENT_CALCULATE_USAGE_DONE,
                                           self.OnUsageCalculationDone)
-        GoSyncEventController().BindEvent(self, GOSYNC_EVENT_CALCULATE_USAGE_UPDATE,
+        GoSyncEventController().BindEvent(self,
+                                          GOSYNC_EVENT_CALCULATE_USAGE_UPDATE,
                                           self.OnUsageCalculationUpdate)
 
     def OnUsageCalculationDone(self, event):
@@ -83,7 +86,7 @@ class PageAccount(wx.Panel):
             )
 
     def OnUsageCalculationUpdate(self, event):
-        percent = (event.data * 100)/self.totalFiles
+        percent = (event.data * 100) / self.totalFiles
         self.driveUsageBar.SetStatusMessage(
             "Calculating your categorical usage... (%d%%)\n" % percent
         )
@@ -94,12 +97,13 @@ class PageAccount(wx.Panel):
             "Calculating your categorical Google Drive usage. Please wait."
         )
 
+
 class GoSyncController(wx.Frame):
     def __init__(self):
         wx.Frame.__init__(self,
                           None,
                           title="GoSync",
-                          size=(520,400),
+                          size=(520, 400),
                           style=mainWindowStyle)
 
         try:
