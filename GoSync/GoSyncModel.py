@@ -96,6 +96,7 @@ google_docs_mimelist = ['application/vnd.google-apps.spreadsheet',
 
 class GoSyncModel(object):
     def __init__(self):
+        # Initialize attributes
         self.calculatingDriveUsage = False
         self.driveAudioUsage = 0
         self.driveMoviesUsage = 0
@@ -106,56 +107,49 @@ class GoSyncModel(object):
         self.savedTotalSize = 0
         self.fcount = 0
         self.updates_done = 0
-
-        self.config_path = os.path.join(os.environ['HOME'], ".gosync")
-        self.credential_file = os.path.join(self.config_path,
-                                            "credentials.json")
-        self.settings_file = os.path.join(self.config_path, "settings.yaml")
-        self.base_mirror_directory = os.path.join(os.environ['HOME'],
-                                                  "Google Drive")
-        self.client_secret_file = os.path.join(os.environ['HOME'],
-                                               '.gosync',
-                                               'client_secrets.json')
-        self.sync_selection = []
-        self.config_file = os.path.join(os.environ['HOME'],
-                                        '.gosync',
-                                        'gosyncrc')
-        self.config_dict = {}
-        self.account_dict = {}
-        self.drive_usage_dict = {}
+        self.authToken = None
+        self.drive = None
         self.config = None
 
-        if not os.path.exists(self.config_path):
-            os.mkdir(self.config_path, 0755)
-            raise ClientSecretsNotFound()
+        # Paths
+        self.config_path = None
+        self.credential_file = None
+        self.settings_file = None
+        self.client_secret_file = None
 
-        if not os.path.exists(self.base_mirror_directory):
-            os.mkdir(self.base_mirror_directory, 0755)
+        self.sync_selection = []
+        self.user_config = {}
+        self.account_dict = {}
+        self.drive_usage_dict = {}
 
-        if not os.path.exists(self.client_secret_file):
-            raise ClientSecretsNotFound()
+        # Set paths and create directories
+        self.configure_authentication_files()
 
-        if not os.path.exists(self.settings_file) or \
-                not os.path.isfile(self.settings_file):
-            self.CreateDefaultSettingsFile()
-
+        # Authenticate
         self.observer = Observer()
-        self.DoAuthenticate()
+        self.DoAuthenticate(self.settings_file)
+
         self.about_drive = self.authToken.service.about().get().execute()
         self.user_email = self.about_drive['user']['emailAddress']
 
-        self.mirror_directory = os.path.join(self.base_mirror_directory,
-                                             self.user_email)
+        # Load GoSync configuration
+        self.config_file = os.path.join(self.config_path, 'config.json')
+        if not os.path.exists(self.config_file):
+            self.create_default_config()
+
+        # Load the configuration settings
+        self.load_config(self.config_file)
+
+        self.base_mirror_directory = self.config['base_mirror_directory']
+        if not os.path.exists(self.base_mirror_directory):
+            os.mkdir(self.base_mirror_directory, 0755)
+
+        self.mirror_directory = self.user_config['mirror_directory']
         if not os.path.exists(self.mirror_directory):
             os.mkdir(self.mirror_directory, 0755)
 
-        self.tree_pickle_file = os.path.join(self.config_path, 'gtree-' +
-                                             self.user_email + '.pick')
-
-        if not os.path.exists(self.config_file):
-            self.CreateDefaultConfigFile()
-
-        self.LoadConfig()
+        self.tree_pickle_file = os.path.join(self.config_path,
+                                             'gtree-%s.pick' % self.user_email)
 
         self.iobserv_handle = self.observer.schedule(
             FileModificationNotifyHandler(self),
@@ -185,12 +179,31 @@ class GoSyncModel(object):
         if not os.path.exists(self.tree_pickle_file):
             self.driveTree = GoogleDriveTree()
         else:
-            self.driveTree = pickle.load(open(self.tree_pickle_file, "rb"))
+            with open(self.tree_pickle_file, "rb") as tree_file:
+                self.driveTree = pickle.load(tree_file)
 
     def SetTheBallRolling(self):
         self.sync_thread.start()
         self.usage_calc_thread.start()
         self.observer.start()
+
+    def configure_authentication_files(self):
+        self.config_path = os.path.join(os.environ['HOME'], ".gosync")
+        if not os.path.exists(self.config_path):
+            os.mkdir(self.config_path, 0755)
+            raise ClientSecretsNotFound()
+
+        self.client_secret_file = os.path.join(self.config_path,
+                                               'client_secrets.json')
+        if not os.path.exists(self.client_secret_file):
+            raise ClientSecretsNotFound()
+
+        self.credential_file = os.path.join(self.config_path,
+                                            "credentials.json")
+        self.settings_file = os.path.join(self.config_path, "settings.yaml")
+        if not os.path.isfile(self.settings_file):
+            self.CreateDefaultSettingsFile()
+
 
     def IsUserLoggedIn(self):
         return self.is_logged_in
@@ -211,29 +224,39 @@ class GoSyncModel(object):
             )
             sfile.write("save_credentials_backend: file\n")
 
-    def CreateDefaultConfigFile(self):
-        with open(self.config_file, 'w') as f:
-            self.config_dict['Sync Selection'] = [['root', '']]
-            self.account_dict[self.user_email] = self.config_dict
-            json.dump(self.account_dict, f)
+    def create_default_config(self):
+        base_mirror_directory = os.path.join(os.environ['HOME'],
+                                             'Google Drive')
+        DEFAULT_CONFIG = {
+            'sync_selection': [['root', '']],
+            'mirror_directory': os.path.join(base_mirror_directory,
+                                             self.user_email)
+        }
 
-    def LoadConfig(self):
-        with open(self.config_file, 'r') as f:
+        with open(self.config_file, 'w') as f:
+            account_dict = {
+                'base_mirror_directory': base_mirror_directory,
+                self.user_email: DEFAULT_CONFIG
+            }
+            json.dump(account_dict, f)
+
+    def load_config(self, config_file):
+        with open(config_file, 'r') as f:
             try:
                 self.config = json.load(f)
                 try:
-                    self.config_dict = self.config[self.user_email]
-                    self.sync_selection = self.config_dict['Sync Selection']
-                    print self.config_dict['Drive Usage']
+                    self.user_config = self.config[self.user_email]
+                    self.sync_selection = self.user_config['sync_selection']
+                    print self.user_config['drive_usage']
                     try:
-                        self.drive_usage_dict = self.config_dict['Drive Usage']
-                        self.totalFilesToCheck = self.drive_usage_dict['Total Files']
-                        self.savedTotalSize = self.drive_usage_dict['Total Size']
-                        self.driveAudioUsage = self.drive_usage_dict['Audio Size']
-                        self.driveMoviesUsage = self.drive_usage_dict['Movies Size']
-                        self.driveDocumentUsage = self.drive_usage_dict['Document Size']
-                        self.drivePhotoUsage = self.drive_usage_dict['Photo Size']
-                        self.driveOthersUsage = self.drive_usage_dict['Others Size']
+                        self.drive_usage_dict = self.user_config['drive_usage']
+                        self.totalFilesToCheck = self.drive_usage_dict['total_files']
+                        self.savedTotalSize = self.drive_usage_dict['total_size']
+                        self.driveAudioUsage = self.drive_usage_dict['audio_size']
+                        self.driveMoviesUsage = self.drive_usage_dict['movies_size']
+                        self.driveDocumentUsage = self.drive_usage_dict['document_size']
+                        self.drivePhotoUsage = self.drive_usage_dict['photo_size']
+                        self.driveOthersUsage = self.drive_usage_dict['others_size']
                     except KeyError:
                         pass
                 except KeyError:
@@ -241,19 +264,19 @@ class GoSyncModel(object):
             except:
                 raise ConfigLoadFailed()
 
-    def SaveConfig(self):
-        with open(self.config_file, 'w') as f:
+    def SaveConfig(self, config_file):
+        with open(config_file, 'w') as f:
             f.truncate()
             if not self.sync_selection:
-                self.config_dict['Sync Selection'] = [['root', '']]
+                self.user_config['sync_selection'] = [['root', '']]
 
-            self.account_dict[self.user_email] = self.config_dict
+            self.account_dict[self.user_email] = self.user_config
 
             json.dump(self.account_dict, f)
 
-    def DoAuthenticate(self):
+    def DoAuthenticate(self, settings_file):
         try:
-            self.authToken = GoogleAuth(self.settings_file)
+            self.authToken = GoogleAuth(settings_file)
             self.authToken.LocalWebserverAuth()
             self.drive = GoogleDrive(self.authToken)
             self.is_logged_in = True
@@ -261,7 +284,7 @@ class GoSyncModel(object):
             dial = wx.MessageDialog(None,
                                     "Authentication Rejected!\n",
                                     'Information',
-                                    wx.ID_OK | wx.ICON_EXCLAMATION)
+                                    wx.OK | wx.ICON_EXCLAMATION)
             dial.ShowModal()
             self.is_logged_in = False
 
@@ -879,16 +902,16 @@ class GoSyncModel(object):
                 try:
                     self.calculateUsageOfFolder('root')
                     GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, 0)
-                    self.drive_usage_dict['Total Files'] = self.totalFilesToCheck
-                    self.drive_usage_dict['Total Size'] = long(self.about_drive['quotaBytesTotal'])
-                    self.drive_usage_dict['Audio Size'] = self.driveAudioUsage
-                    self.drive_usage_dict['Movies Size'] = self.driveMoviesUsage
-                    self.drive_usage_dict['Document Size'] = self.driveDocumentUsage
-                    self.drive_usage_dict['Photo Size'] = self.drivePhotoUsage
-                    self.drive_usage_dict['Others Size'] = self.driveOthersUsage
+                    self.drive_usage_dict['total_files'] = self.totalFilesToCheck
+                    self.drive_usage_dict['total_size'] = long(self.about_drive['quotaBytesTotal'])
+                    self.drive_usage_dict['audio_size'] = self.driveAudioUsage
+                    self.drive_usage_dict['movies_size'] = self.driveMoviesUsage
+                    self.drive_usage_dict['document_size'] = self.driveDocumentUsage
+                    self.drive_usage_dict['photo_size'] = self.drivePhotoUsage
+                    self.drive_usage_dict['others_size'] = self.driveOthersUsage
                     pickle.dump(self.driveTree, open(self.tree_pickle_file, "wb"))
-                    self.config_dict['Drive Usage'] = self.drive_usage_dict
-                    self.SaveConfig()
+                    self.user_config['drive_usage'] = self.drive_usage_dict
+                    self.SaveConfig(self.config_file)
                 except:
                     self.driveAudioUsage = 0
                     self.driveMoviesUsage = 0
@@ -947,8 +970,8 @@ class GoSyncModel(object):
                 if d[0] == folder.GetPath() and d[1] == folder.GetId():
                     return
             self.sync_selection.append([folder.GetPath(), folder.GetId()])
-        self.config_dict['Sync Selection'] = self.sync_selection
-        self.SaveConfig()
+        self.user_config['sync_selection'] = self.sync_selection
+        self.SaveConfig(self.config_file)
 
     def GetSyncList(self):
         return copy.deepcopy(self.sync_selection)
