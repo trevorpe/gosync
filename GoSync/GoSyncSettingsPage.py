@@ -67,17 +67,17 @@ class SettingsPage(wx.Panel):
     def SyncSetting(self, event):
         if self.cb.GetValue():
             self.dstc.Disable()
-            self.sync_model.SetSyncSelection('root')
+            self.sync_model.set_sync_selection('root')
         else:
             self.dstc.Enable()
             checkedItems = self.dstc.GetCheckedItems()
             for item in checkedItems:
                 folder = self.dstc.GetPyData(item)
-                self.sync_model.SetSyncSelection(folder)
+                self.sync_model.set_sync_selection(folder)
 
     def ItemChecked(self, event):
         folder = self.dstc.GetPyData(event.GetItem())
-        self.sync_model.SetSyncSelection(folder)
+        self.sync_model.set_sync_selection(folder)
 
     def MakeDriveTree(self, gnode, tnode):
         file_list = gnode.GetChildren()
@@ -109,12 +109,12 @@ class SettingsPage(wx.Panel):
         return itemToBeChecked
 
     def RefreshTree(self, event):
-        driveTree = self.sync_model.GetDriveDirectoryTree()
+        driveTree = self.sync_model.get_drive_directory_tree()
         self.dstc.DeleteAllItems()
         self.dstc_root = self.dstc.AddRoot("Google Drive Root")
         self.MakeDriveTree(driveTree.GetRoot(), self.dstc_root)
         self.dstc.ExpandAll()
-        sync_list = self.sync_model.GetSyncList()
+        sync_list = self.sync_model.get_sync_list()
         for d in sync_list:
             if d[0] == 'root':
                 self.cb.SetValue(True)

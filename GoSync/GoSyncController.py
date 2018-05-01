@@ -42,7 +42,7 @@ class PageAccount(wx.Panel):
         self.sync_model = sync_model
         self.totalFiles = 0
 
-        aboutdrive = sync_model.DriveInfo()
+        aboutdrive = sync_model.get_drive_info()
         self.driveUsageBar = DriveUsageBox(self,
                                            long(aboutdrive['quotaBytesTotal']),
                                            -1)
@@ -74,11 +74,11 @@ class PageAccount(wx.Panel):
             self.driveUsageBar.SetStatusMessage(
                 "Your Google Drive usage is shown below:"
             )
-            self.driveUsageBar.SetMoviesUsage(self.sync_model.GetMovieUsage())
-            self.driveUsageBar.SetDocumentUsage(self.sync_model.GetDocumentUsage())
-            self.driveUsageBar.SetOthersUsage(self.sync_model.GetOthersUsage())
-            self.driveUsageBar.SetAudioUsage(self.sync_model.GetAudioUsage())
-            self.driveUsageBar.SetPhotoUsage(self.sync_model.GetPhotoUsage())
+            self.driveUsageBar.SetMoviesUsage(self.sync_model.movies_usage)
+            self.driveUsageBar.SetDocumentUsage(self.sync_model.document_usage)
+            self.driveUsageBar.SetOthersUsage(self.sync_model.others_usage)
+            self.driveUsageBar.SetAudioUsage(self.sync_model.audio_usage)
+            self.driveUsageBar.SetPhotoUsage(self.sync_model.photo_usage)
             self.driveUsageBar.RePaint()
         else:
             self.driveUsageBar.SetStatusMessage(
@@ -124,9 +124,9 @@ class GoSyncController(wx.Frame):
             dial = wx.MessageDialog(None, 'GoSync failed to initialize\n',
                                     'Error', wx.OK | wx.ICON_EXCLAMATION)
             res = dial.ShowModal()
-            sys.exit(1)
+            raise
 
-        self.aboutdrive = self.sync_model.DriveInfo()
+        self.aboutdrive = self.sync_model.get_drive_info()
 
         title_string = "GoSync --%s (%s used of %s)" % (
             self.aboutdrive['name'],
@@ -178,7 +178,7 @@ class GoSyncController(wx.Frame):
         self.sb = self.CreateStatusBar(2)
         self.sb.SetStatusWidths([-6, -1])
 
-        if self.sync_model.IsSyncEnabled():
+        if self.sync_model.is_sync_enabled():
             self.sb.SetStatusText("Running", 1)
         else:
             self.sb.SetStatusText("Paused", 1)
@@ -194,7 +194,7 @@ class GoSyncController(wx.Frame):
         GoSyncEventController().BindEvent(self, GOSYNC_EVENT_SYNC_INV_FOLDER,
                                           self.OnSyncInvalidFolder)
 
-        self.sync_model.SetTheBallRolling()
+        self.sync_model.start()
 
     def OnSyncInvalidFolder(self, event):
         dial = wx.MessageDialog(
@@ -259,11 +259,11 @@ class GoSyncController(wx.Frame):
             wx.CallAfter(self.Destroy)
 
     def OnToggleSync(self, evt):
-        if self.sync_model.IsSyncEnabled():
-            self.sync_model.StopSync()
+        if self.sync_model.is_sync_enabled():
+            self.sync_model.stop_sync()
             self.sb.SetStatusText("Paused", 1)
         else:
-            self.sync_model.StartSync()
+            self.sync_model.start_sync()
             self.sb.SetStatusText("Running", 1)
 
     def OnAbout(self, evt):

@@ -98,13 +98,6 @@ class GoSyncModel(object):
     def __init__(self):
         # Initialize attributes
         self.calculatingDriveUsage = False
-        self.driveAudioUsage = 0
-        self.driveMoviesUsage = 0
-        self.drivePhotoUsage = 0
-        self.driveDocumentUsage = 0
-        self.driveOthersUsage = 0
-        self.totalFilesToCheck = 0
-        self.savedTotalSize = 0
         self.fcount = 0
         self.updates_done = 0
         self.authToken = None
@@ -127,7 +120,7 @@ class GoSyncModel(object):
 
         # Authenticate
         self.observer = Observer()
-        self.DoAuthenticate(self.settings_file)
+        self.do_authenticate(self.settings_file)
 
         self.about_drive = self.authToken.service.about().get().execute()
         self.user_email = self.about_drive['user']['emailAddress']
@@ -159,7 +152,7 @@ class GoSyncModel(object):
 
         self.sync_lock = threading.Lock()
         self.sync_thread = threading.Thread(target=self.run)
-        self.usage_calc_thread = threading.Thread(target=self.calculateUsage)
+        self.usage_calc_thread = threading.Thread(target=self.calculate_usage)
         self.sync_thread.daemon = True
         self.usage_calc_thread.daemon = True
         self.syncRunning = threading.Event()
@@ -182,10 +175,66 @@ class GoSyncModel(object):
             with open(self.tree_pickle_file, "rb") as tree_file:
                 self.driveTree = pickle.load(tree_file)
 
-    def SetTheBallRolling(self):
+    def start(self):
         self.sync_thread.start()
         self.usage_calc_thread.start()
         self.observer.start()
+
+    @property
+    def number_of_files(self):
+        return self.drive_usage_dict['total_files']
+
+    @number_of_files.setter
+    def number_of_files(self, value):
+        self.drive_usage_dict['total_files'] = value
+
+    @property
+    def total_file_size(self):
+        return self.drive_usage_dict['total_size']
+
+    @total_file_size.setter
+    def total_file_size(self, value):
+        self.drive_usage_dict['total_size'] = value
+
+    @property
+    def audio_usage(self):
+        return self.drive_usage_dict['audio_size']
+
+    @audio_usage.setter
+    def audio_usage(self, value):
+        self.drive_usage_dict['audio_size'] = value
+
+    @property
+    def movies_usage(self):
+        return self.drive_usage_dict['movies_size']
+
+    @movies_usage.setter
+    def movies_usage(self, value):
+        self.drive_usage_dict['movies_size'] = value
+
+    @property
+    def document_usage(self):
+        return self.drive_usage_dict['document_size']
+
+    @document_usage.setter
+    def document_usage(self, value):
+        self.drive_usage_dict['document_size'] = value
+
+    @property
+    def photo_usage(self):
+        return self.drive_usage_dict['photo_size']
+
+    @photo_usage.setter
+    def photo_usage(self, value):
+        self.drive_usage_dict['photo_size'] = value
+
+    @property
+    def others_usage(self):
+        return self.drive_usage_dict['others_size']
+
+    @others_usage.setter
+    def others_usage(self, value):
+        self.drive_usage_dict['others_size'] = value
 
     def configure_authentication_files(self):
         self.config_path = os.path.join(os.environ['HOME'], ".gosync")
@@ -202,18 +251,18 @@ class GoSyncModel(object):
                                             "credentials.json")
         self.settings_file = os.path.join(self.config_path, "settings.yaml")
         if not os.path.isfile(self.settings_file):
-            self.CreateDefaultSettingsFile()
+            self.create_default_settings_file()
 
 
-    def IsUserLoggedIn(self):
+    def is_user_logged_in(self):
         return self.is_logged_in
 
-    def HashOfFile(self, abs_filepath):
+    def hash_of_file(self, abs_filepath):
         with open(abs_filepath, "r") as f:
             data = f.read()
         return hashlib.md5(data).hexdigest()
 
-    def CreateDefaultSettingsFile(self):
+    def create_default_settings_file(self):
         with open(self.settings_file, 'w') as sfile:
             sfile.write("save_credentials: False\n")
             sfile.write(
@@ -250,13 +299,6 @@ class GoSyncModel(object):
                     print self.user_config['drive_usage']
                     try:
                         self.drive_usage_dict = self.user_config['drive_usage']
-                        self.totalFilesToCheck = self.drive_usage_dict['total_files']
-                        self.savedTotalSize = self.drive_usage_dict['total_size']
-                        self.driveAudioUsage = self.drive_usage_dict['audio_size']
-                        self.driveMoviesUsage = self.drive_usage_dict['movies_size']
-                        self.driveDocumentUsage = self.drive_usage_dict['document_size']
-                        self.drivePhotoUsage = self.drive_usage_dict['photo_size']
-                        self.driveOthersUsage = self.drive_usage_dict['others_size']
                     except KeyError:
                         pass
                 except KeyError:
@@ -264,17 +306,15 @@ class GoSyncModel(object):
             except:
                 raise ConfigLoadFailed()
 
-    def SaveConfig(self, config_file):
+    def save_config(self, config_file):
         with open(config_file, 'w') as f:
             f.truncate()
             if not self.sync_selection:
                 self.user_config['sync_selection'] = [['root', '']]
 
-            self.account_dict[self.user_email] = self.user_config
+            json.dump(self.config, f)
 
-            json.dump(self.account_dict, f)
-
-    def DoAuthenticate(self, settings_file):
+    def do_authenticate(self, settings_file):
         try:
             self.authToken = GoogleAuth(settings_file)
             self.authToken.LocalWebserverAuth()
@@ -288,26 +328,26 @@ class GoSyncModel(object):
             dial.ShowModal()
             self.is_logged_in = False
 
-    def DoUnAuthenticate(self):
+    def do_unauthenticate(self):
             self.do_sync = False
             self.observer.unschedule(self.iobserv_handle)
             self.iobserv_handle = None
             os.remove(self.credential_file)
             self.is_logged_in = False
 
-    def DriveInfo(self):
+    def get_drive_info(self):
         return self.about_drive
 
-    def PathLeaf(self, path):
+    def path_leaf(self, path):
         head, tail = ntpath.split(path)
         return tail or ntpath.basename(head)
 
-    def GetFolderOnDrive(self, folder_name, parent='root'):
+    def get_folder_on_drive(self, folder_name, parent='root'):
         """
         Return the folder with name in "folder_name" in the parent folder
         mentioned in parent.
         """
-        self.logger.debug("GetFolderOnDrive: searching %s on %s... " % (folder_name, parent))
+        self.logger.debug("get_folder_on_drive: searching %s on %s... " % (folder_name, parent))
         file_list = self.drive.ListFile(
             {'q': "'%s' in parents and trashed=false" % parent}
         ).GetList()
@@ -318,7 +358,7 @@ class GoSyncModel(object):
 
         return None
 
-    def LocateFolderOnDrive(self, folder_path):
+    def locate_folder_on_drive(self, folder_path):
         """
         Locate and return the directory in the path. The complete path
         is walked and the last directory is returned. An exception is raised
@@ -327,7 +367,7 @@ class GoSyncModel(object):
         dir_list = folder_path.split(os.sep)
         croot = 'root'
         for dir1 in dir_list:
-            folder = self.GetFolderOnDrive(dir1, croot)
+            folder = self.get_folder_on_drive(dir1, croot)
             if not folder:
                 raise FolderNotFound()
 
@@ -335,9 +375,9 @@ class GoSyncModel(object):
 
         return folder
 
-    def LocateFileInFolder(self, filename, parent='root'):
+    def locate_file_in_folder(self, filename, parent='root'):
         try:
-            file_list = self.MakeFileListQuery(
+            file_list = self.make_file_list_query(
                 {'q': "'%s' in parents and trashed=false" % parent}
             )
             for f in file_list:
@@ -348,46 +388,46 @@ class GoSyncModel(object):
         except:
             raise FileNotFound()
 
-    def LocateFileOnDrive(self, abs_filepath):
+    def locate_file_on_drive(self, abs_filepath):
         dirpath = os.path.dirname(abs_filepath)
-        filename = self.PathLeaf(abs_filepath)
+        filename = self.path_leaf(abs_filepath)
 
         if dirpath != '':
             try:
-                f = self.LocateFolderOnDrive(dirpath)
+                f = self.locate_folder_on_drive(dirpath)
                 try:
-                    fil = self.LocateFileInFolder(filename, f['id'])
+                    fil = self.locate_file_in_folder(filename, f['id'])
                     return fil
                 except FileNotFound:
-                    self.logger.debug("LocateFileOnDrive: File not found.\n")
+                    self.logger.debug("locate_file_on_drive: File not found.\n")
                     raise
                 except FileListQueryFailed:
-                    self.logger.debug("LocateFileOnDrive: File list query "
+                    self.logger.debug("locate_file_on_drive: File list query "
                                       "failed\n")
                     raise
             except FolderNotFound:
-                self.logger.debug("LocateFileOnDrive: Folder not found\n")
+                self.logger.debug("locate_file_on_drive: Folder not found\n")
                 raise
             except FileListQueryFailed:
-                self.logger.debug("LocateFileOnDrive:  %s folder not found\n"
+                self.logger.debug("locate_file_on_drive:  %s folder not found\n"
                                   "" % dirpath)
                 raise
         else:
             try:
-                fil = self.LocateFileInFolder(filename)
+                fil = self.locate_file_in_folder(filename)
                 return fil
             except FileNotFound:
-                self.logger.debug("LocateFileOnDrive: File not found.\n")
+                self.logger.debug("locate_file_on_drive: File not found.\n")
                 raise
             except FileListQueryFailed:
-                self.logger.debug("LocateFileOnDrive: File list query failed.\n")
+                self.logger.debug("locate_file_on_drive: File list query failed.\n")
                 raise
             except:
-                self.logger.error("LocateFileOnDrive: Unknown error in "
+                self.logger.error("locate_file_on_drive: Unknown error in "
                                   "locating file in drive\n")
                 raise
 
-    def CreateDirectoryInParent(self, dirname, parent_id='root'):
+    def create_dir_in_parent(self, dirname, parent_id='root'):
         upfile = self.drive.CreateFile({
             'title': dirname,
             'mimeType': google_folder_mime,
@@ -395,22 +435,22 @@ class GoSyncModel(object):
         })
         upfile.Upload()
 
-    def CreateDirectoryByPath(self, dirpath):
+    def create_dir_by_path(self, dirpath):
         self.logger.debug('create directory: %s\n' % dirpath)
         drivepath = dirpath.split(self.mirror_directory + '/')[1]
         basepath = os.path.dirname(drivepath)
-        dirname = self.PathLeaf(dirpath)
+        dirname = self.path_leaf(dirpath)
 
         try:
-            self.LocateFolderOnDrive(drivepath)
+            self.locate_folder_on_drive(drivepath)
             return
         except FolderNotFound:
             if basepath == '':
-                self.CreateDirectoryInParent(dirname)
+                self.create_dir_in_parent(dirname)
             else:
                 try:
-                    parent_folder = self.LocateFolderOnDrive(basepath)
-                    self.CreateDirectoryInParent(dirname, parent_folder['id'])
+                    parent_folder = self.locate_folder_on_drive(basepath)
+                    self.create_dir_in_parent(dirname, parent_folder['id'])
                 except:
                     errorMsg = ("Failed to locate directory path %s on drive."
                                 "\n" % basepath)
@@ -427,9 +467,9 @@ class GoSyncModel(object):
             dial.ShowModal()
             return
 
-    def CreateRegularFile(self, file_path, parent='root', uploaded=False):
+    def create_regular_file(self, file_path, parent='root', uploaded=False):
         self.logger.debug("Create file %s\n" % file_path)
-        filename = self.PathLeaf(file_path)
+        filename = self.path_leaf(file_path)
         upfile = self.drive.CreateFile({
             'title': filename,
             "parents": [{"kind": "drive#fileLink", "id": parent}]
@@ -437,18 +477,18 @@ class GoSyncModel(object):
         upfile.SetContentFile(file_path)
         upfile.Upload()
 
-    def UploadFile(self, file_path):
+    def upload_file(self, file_path):
         if os.path.isfile(file_path):
             drivepath = file_path.split(self.mirror_directory + '/')[1]
             self.logger.debug("file: %s drivepath is %s\n" % (file_path,
                                                               drivepath))
             try:
-                f = self.LocateFileOnDrive(drivepath)
+                f = self.locate_file_on_drive(drivepath)
                 self.logger.debug('Found file %s on remote (dpath: %s)'
                                   '\n' % (f['title'], drivepath))
                 newfile = False
                 self.logger.debug('Checking if they are same... ')
-                if f['md5Checksum'] == self.HashOfFile(file_path):
+                if f['md5Checksum'] == self.hash_of_file(file_path):
                     self.logger.debug('yes\n')
                     return
                 else:
@@ -460,11 +500,11 @@ class GoSyncModel(object):
             dirpath = os.path.dirname(drivepath)
             if dirpath == '':
                 self.logger.debug('Creating %s file in root\n' % file_path)
-                self.CreateRegularFile(file_path, 'root', newfile)
+                self.create_regular_file(file_path, 'root', newfile)
             else:
                 try:
-                    f = self.LocateFolderOnDrive(dirpath)
-                    self.CreateRegularFile(file_path, f['id'], newfile)
+                    f = self.locate_folder_on_drive(dirpath)
+                    self.create_regular_file(file_path, f['id'], newfile)
                 except FolderNotFound:
                     # We are coming from premise that upload comes as part
                     # of observer. So before notification of this file's
@@ -474,14 +514,14 @@ class GoSyncModel(object):
                     # Folder not found? That cannot happen. Can it?
                     raise RegularFileUploadFailed()
         else:
-            self.CreateDirectoryByPath(file_path)
+            self.create_dir_by_path(file_path)
 
-    def UploadObservedFile(self, file_path):
+    def upload_observed_file(self, file_path):
         self.sync_lock.acquire()
-        self.UploadFile(file_path)
+        self.upload_file(file_path)
         self.sync_lock.release()
 
-    def RenameFile(self, file_object, new_title):
+    def rename_file(self, file_object, new_title):
         try:
             file = {'title': new_title}
 
@@ -498,14 +538,14 @@ class GoSyncModel(object):
             self.logger.exception('An unknown error occurred file renaming file\n')
             return None
 
-    def RenameObservedFile(self, file_path, new_name):
+    def rename_observed_file(self, file_path, new_name):
         self.sync_lock.acquire()
         drive_path = file_path.split(self.mirror_directory + '/')[1]
-        self.logger.debug("RenameObservedFile: Rename %s to new name %s\n"
+        self.logger.debug("rename_observed_file: Rename %s to new name %s\n"
                           % (file_path, new_name))
         try:
-            ftd = self.LocateFileOnDrive(drive_path)
-            nftd = self.RenameFile(ftd, new_name)
+            ftd = self.locate_file_on_drive(drive_path)
+            nftd = self.rename_file(ftd, new_name)
             if not nftd:
                 self.logger.error("File rename failed\n")
         except:
@@ -513,7 +553,7 @@ class GoSyncModel(object):
 
         self.sync_lock.release()
 
-    def TrashFile(self, file_object):
+    def trash_file(self, file_object):
         try:
             self.authToken.service.files().trash(fileId=file_object['id']).execute()
             self.logger.info({"TRASH_FILE: File %s deleted successfully.\n" % file_object['title']})
@@ -521,14 +561,14 @@ class GoSyncModel(object):
             self.logger.error("TRASH_FILE: HTTP Error\n")
             raise RegularFileTrashFailed()
 
-    def TrashObservedFile(self, file_path):
+    def trash_observed_file(self, file_path):
         self.sync_lock.acquire()
         drive_path = file_path.split(self.mirror_directory + '/')[1]
         self.logger.debug({"TRASH_FILE: dirpath to delete: %s\n" % drive_path})
         try:
-            ftd = self.LocateFileOnDrive(drive_path)
+            ftd = self.locate_file_on_drive(drive_path)
             try:
-                self.TrashFile(ftd)
+                self.trash_file(ftd)
             except RegularFileTrashFailed:
                 self.logger.error({"TRASH_FILE: Failed to move file %s to "
                                    "trash\n" % drive_path})
@@ -542,7 +582,7 @@ class GoSyncModel(object):
 
         self.sync_lock.release()
 
-    def MoveFile(self, src_file, dst_folder='root', src_folder='root'):
+    def move_file(self, src_file, dst_folder='root', src_folder='root'):
         try:
             if dst_folder != 'root':
                 did = dst_folder['id']
@@ -563,7 +603,7 @@ class GoSyncModel(object):
         except:
             self.logger.exception("move failed\n")
 
-    def MoveObservedFile(self, src_path, dest_path):
+    def move_observed_file(self, src_path, dest_path):
         from_drive_path = src_path.split(self.mirror_directory + '/')[1]
         to_drive_path = os.path.dirname(
             dest_path.split(self.mirror_directory + '/')[1]
@@ -573,22 +613,22 @@ class GoSyncModel(object):
                                                       to_drive_path))
 
         try:
-            ftm = self.LocateFileOnDrive(from_drive_path)
-            self.logger.debug("MoveObservedFile: Found source file on drive\n")
+            ftm = self.locate_file_on_drive(from_drive_path)
+            self.logger.debug("move_observed_file: Found source file on drive\n")
             if os.path.dirname(from_drive_path) == '':
                 sf = 'root'
             else:
-                sf = self.LocateFolderOnDrive(os.path.dirname(from_drive_path))
-            self.logger.debug("MoveObservedFile: Found source folder on drive\n")
+                sf = self.locate_folder_on_drive(os.path.dirname(from_drive_path))
+            self.logger.debug("move_observed_file: Found source folder on drive\n")
             try:
                 if to_drive_path == '':
                     df = 'root'
                 else:
-                    df = self.LocateFolderOnDrive(to_drive_path)
-                self.logger.debug("MoveObservedFile: Found destination folder on drive\n")
+                    df = self.locate_folder_on_drive(to_drive_path)
+                self.logger.debug("move_observed_file: Found destination folder on drive\n")
                 try:
                     self.logger.debug("MovingFile() ")
-                    self.MoveFile(ftm, df, sf)
+                    self.move_file(ftm, df, sf)
                     self.logger.debug("done\n")
                 except (Unkownerror, FileMoveFailed):
                     self.logger.error("MovedObservedFile: Failed\n")
@@ -597,37 +637,37 @@ class GoSyncModel(object):
                     self.logger.error("?????\n")
                     return
             except FolderNotFound:
-                self.logger.error("MoveObservedFile: Couldn't locate destination folder on drive.\n")
+                self.logger.error("move_observed_file: Couldn't locate destination folder on drive.\n")
                 return
             except:
-                self.logger.error("MoveObservedFile: Unknown error while locating destination folder on drive.\n")
+                self.logger.error("move_observed_file: Unknown error while locating destination folder on drive.\n")
                 return
         except FileNotFound:
-                self.logger.error("MoveObservedFile: Couldn't locate file on drive.\n")
+                self.logger.error("move_observed_file: Couldn't locate file on drive.\n")
                 return
         except FileListQueryFailed:
-            self.logger.error("MoveObservedFile: File Query failed. aborting.\n")
+            self.logger.error("move_observed_file: File Query failed. aborting.\n")
             return
         except FolderNotFound:
-            self.logger.error("MoveObservedFile: Folder not found\n")
+            self.logger.error("move_observed_file: Folder not found\n")
             return
         except:
-            self.logger.error("MoveObservedFile: Unknown error while moving file.\n")
+            self.logger.error("move_observed_file: Unknown error while moving file.\n")
             return
 
-    def HandleMovedFile(self, src_path, dest_path):
+    def handle_moved_file(self, src_path, dest_path):
         drive_path1 = os.path.dirname(src_path.split(self.mirror_directory + '/')[1])
         drive_path2 = os.path.dirname(dest_path.split(self.mirror_directory + '/')[1])
 
         if drive_path1 == drive_path2:
             self.logger.debug("Rename file\n")
-            self.RenameObservedFile(src_path, self.PathLeaf(dest_path))
+            self.rename_observed_file(src_path, self.path_leaf(dest_path))
         else:
             self.logger.debug("Move file\n")
-            self.MoveObservedFile(src_path, dest_path)
+            self.move_observed_file(src_path, dest_path)
 
     # DOWNLOAD SECTION
-    def MakeFileListQuery(self, query):
+    def make_file_list_query(self, query):
         # Retry 5 times to get the query
         for n in range(0, 5):
             try:
@@ -637,19 +677,19 @@ class GoSyncModel(object):
                     self.logger.error("user rate limit/quota exceeded. Will try later\n")
                     time.sleep((2**n) + random.random())
             except:
-                self.logger.error("MakeFileListQuery: failed with reason %s\n" % error.resp.reason)
+                self.logger.error("make_file_list_query: failed with reason %s\n" % error.resp.reason)
                 time.sleep((2**n) + random.random())
 
         self.logger.error("Can't get the connection back after many retries. Bailing out\n")
         raise FileListQueryFailed
 
-    def TotalFilesInFolder(self, parent='root'):
+    def get_total_files_in_folder(self, parent='root'):
         file_count = 0
         try:
-            file_list = self.MakeFileListQuery({'q': "'%s' in parents and trashed=false" % parent})
+            file_list = self.make_file_list_query({'q': "'%s' in parents and trashed=false" % parent})
             for f in file_list:
                 if f['mimeType'] == google_folder_mime:
-                    file_count += self.TotalFilesInFolder(f['id'])
+                    file_count += self.get_total_files_in_folder(f['id'])
                     file_count += 1
                 else:
                     file_count += 1
@@ -658,24 +698,24 @@ class GoSyncModel(object):
         except:
             raise
 
-    def IsGoogleDocument(self, f):
+    def is_google_document(self, f):
         if any(f['mimeType'] in s for s in google_docs_mimelist):
             return True
         else:
             return False
 
-    def TotalFilesInDrive(self):
-        return self.TotalFilesInFolder()
+    def get_total_files_in_drive(self):
+        return self.get_total_files_in_folder()
 
-    def DownloadFileByObject(self, file_obj, download_path):
+    def download_file_by_object(self, file_obj, download_path):
         dfile = self.drive.CreateFile({'id': file_obj['id']})
         abs_filepath = os.path.join(download_path, file_obj['title'])
         if os.path.exists(abs_filepath):
-            if self.HashOfFile(abs_filepath) == file_obj['md5Checksum']:
+            if self.hash_of_file(abs_filepath) == file_obj['md5Checksum']:
                 self.logger.debug('%s file is same as local. not downloading\n' % abs_filepath)
                 return
             else:
-                self.logger.debug("DownloadFileByObject: Local and remote "
+                self.logger.debug("download_file_by_object: Local and remote "
                                   "file with same name but different content. "
                                   "Skipping. (local file: %s)\n" % abs_filepath)
         else:
@@ -687,9 +727,9 @@ class GoSyncModel(object):
             self.updates_done = 1
             self.logger.info('Done\n')
 
-    def SyncRemoteDirectory(self, parent, pwd, recursive=True):
+    def sync_remote_directory(self, parent, pwd, recursive=True):
         if not self.syncRunning.is_set():
-            self.logger.debug("SyncRemoteDirectory: Sync has been paused. "
+            self.logger.debug("sync_remote_directory: Sync has been paused. "
                               "Aborting.\n")
             return
 
@@ -697,12 +737,12 @@ class GoSyncModel(object):
             os.makedirs(os.path.join(self.mirror_directory, pwd))
 
         try:
-            file_list = self.MakeFileListQuery(
+            file_list = self.make_file_list_query(
                 {'q': "'%s' in parents and trashed=false" % parent}
             )
             for f in file_list:
                 if not self.syncRunning.is_set():
-                    self.logger.debug("SyncRemoteDirectory: Sync has been "
+                    self.logger.debug("sync_remote_directory: Sync has been "
                                       "paused. Aborting.\n")
                     return
 
@@ -719,15 +759,15 @@ class GoSyncModel(object):
                         os.makedirs(abs_dirpath)
                         self.logger.debug("done\n")
                     self.logger.debug('syncing directory %s\n' % f['title'])
-                    self.SyncRemoteDirectory(f['id'], os.path.join(pwd, f['title']))
+                    self.sync_remote_directory(f['id'], os.path.join(pwd, f['title']))
                     if not self.syncRunning.is_set():
-                        self.logger.debug("SyncRemoteDirectory: Sync has been "
+                        self.logger.debug("sync_remote_directory: Sync has been "
                                           "paused. Aborting.\n")
                         return
                 else:
                     self.logger.debug("Checking file %s\n" % f['title'])
-                    if not self.IsGoogleDocument(f):
-                        self.DownloadFileByObject(
+                    if not self.is_google_document(f):
+                        self.download_file_by_object(
                             f,
                             os.path.join(self.mirror_directory, pwd)
                         )
@@ -737,13 +777,13 @@ class GoSyncModel(object):
             self.logger.error("Failed to sync directory\n")
             raise
 
-    def SyncLocalDirectory(self):
+    def sync_local_directory(self):
         for root, dirs, files in os.walk(self.mirror_directory):
             for names in files:
                 try:
                     dirpath = os.path.join(root, names)
                     drivepath = dirpath.split(self.mirror_directory + '/')[1]
-                    self.LocateFileOnDrive(drivepath)
+                    self.locate_file_on_drive(drivepath)
                 except FileListQueryFailed:
                     # if the file list query failed, we can't delete the local file even if
                     # its gone in remote drive. Let the next sync come and take care of this
@@ -761,7 +801,7 @@ class GoSyncModel(object):
                 try:
                     dirpath = os.path.join(root, names)
                     drivepath = dirpath.split(self.mirror_directory + '/')[1]
-                    self.LocateFileOnDrive(drivepath)
+                    self.locate_file_on_drive(drivepath)
                 except FileListQueryFailed:
                     # if the file list query failed, we can't delete the local file even if
                     # its gone in remote drive. Let the next sync come and take care of this
@@ -779,7 +819,7 @@ class GoSyncModel(object):
         for d in self.sync_selection:
             if d[0] != 'root':
                 try:
-                    f = self.LocateFolderOnDrive(d[0])
+                    f = self.locate_folder_on_drive(d[0])
                     if f['id'] != d[1]:
                         raise FolderNotFound()
                     break
@@ -811,13 +851,13 @@ class GoSyncModel(object):
                     self.logger.info("Syncing remote (%s)... " % d[0])
                     if d[0] != 'root':
                         # Root folder files are always synced
-                        self.SyncRemoteDirectory('root', '', False)
-                        self.SyncRemoteDirectory(d[1], d[0])
+                        self.sync_remote_directory('root', '', False)
+                        self.sync_remote_directory(d[1], d[0])
                     else:
-                        self.SyncRemoteDirectory('root', '')
+                        self.sync_remote_directory('root', '')
                     self.logger.info("done\n")
                 self.logger.info("Syncing local...")
-                self.SyncLocalDirectory()
+                self.sync_local_directory()
                 self.logger.info("done\n")
                 if self.updates_done:
                     self.usageCalculateEvent.set()
@@ -839,7 +879,7 @@ class GoSyncModel(object):
                 self.syncRunning.wait()
                 time.sleep(1)
 
-    def GetFileSize(self, f):
+    def get_file_size(self, f):
         try:
             size = f['fileSize']
             return long(size)
@@ -848,9 +888,9 @@ class GoSyncModel(object):
                               "\n" % (f['title'], f['mimeType']))
             return 0
 
-    def calculateUsageOfFolder(self, folder_id):
+    def calculate_usage_of_folder(self, folder_id):
         try:
-            file_list = self.MakeFileListQuery(
+            file_list = self.make_file_list_query(
                 {'q': "'%s' in parents and trashed=false" % folder_id}
             )
             for f in file_list:
@@ -858,24 +898,24 @@ class GoSyncModel(object):
                 GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_UPDATE, self.fcount)
                 if f['mimeType'] == google_folder_mime:
                     self.driveTree.AddFolder(folder_id, f['id'], f['title'], f)
-                    self.calculateUsageOfFolder(f['id'])
+                    self.calculate_usage_of_folder(f['id'])
                 else:
-                    if not self.IsGoogleDocument(f):
+                    if not self.is_google_document(f):
                         if any(f['mimeType'] in s for s in audio_file_mimelist):
-                            self.driveAudioUsage += self.GetFileSize(f)
+                            self.audio_usage += self.get_file_size(f)
                         elif any(f['mimeType'] in s for s in image_file_mimelist):
-                            self.drivePhotoUsage += self.GetFileSize(f)
+                            self.photo_usage += self.get_file_size(f)
                         elif any(f['mimeType'] in s for s in movie_file_mimelist):
-                            self.driveMoviesUsage += self.GetFileSize(f)
+                            self.movies_usage += self.get_file_size(f)
                         elif any(f['mimeType'] in s for s in document_file_mimelist):
-                            self.driveDocumentUsage += self.GetFileSize(f)
+                            self.document_usage += self.get_file_size(f)
                         else:
-                            self.driveOthersUsage += self.GetFileSize(f)
+                            self.others_usage += self.get_file_size(f)
 
         except:
             raise
 
-    def calculateUsage(self):
+    def calculate_usage(self):
         while True:
             self.usageCalculateEvent.wait()
             self.usageCalculateEvent.clear()
@@ -888,36 +928,31 @@ class GoSyncModel(object):
 
             self.updates_done = 0
             self.calculatingDriveUsage = True
-            self.driveAudioUsage = 0
-            self.driveMoviesUsage = 0
-            self.driveDocumentUsage = 0
-            self.drivePhotoUsage = 0
-            self.driveOthersUsage = 0
+            self.audio_usage = 0
+            self.movies_usage = 0
+            self.document_usage = 0
+            self.photo_usage = 0
+            self.others_usage = 0
             self.fcount = 0
             try:
-                self.totalFilesToCheck = self.TotalFilesInDrive()
-                self.logger.info("Total files to check %d\n" % self.totalFilesToCheck)
+                self.number_of_files = self.get_total_files_in_drive()
+                self.logger.info("Total files to check %d\n" % self.number_of_files)
                 GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_STARTED,
-                                                  self.totalFilesToCheck)
+                                                  self.number_of_files)
                 try:
-                    self.calculateUsageOfFolder('root')
+                    self.calculate_usage_of_folder('root')
                     GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, 0)
-                    self.drive_usage_dict['total_files'] = self.totalFilesToCheck
-                    self.drive_usage_dict['total_size'] = long(self.about_drive['quotaBytesTotal'])
-                    self.drive_usage_dict['audio_size'] = self.driveAudioUsage
-                    self.drive_usage_dict['movies_size'] = self.driveMoviesUsage
-                    self.drive_usage_dict['document_size'] = self.driveDocumentUsage
-                    self.drive_usage_dict['photo_size'] = self.drivePhotoUsage
-                    self.drive_usage_dict['others_size'] = self.driveOthersUsage
-                    pickle.dump(self.driveTree, open(self.tree_pickle_file, "wb"))
+                    self.total_size = long(self.about_drive['quotaBytesTotal'])
+                    with open(self.tree_pickle_file, "wb") as tree_file:
+                        pickle.dump(self.driveTree, tree_file)
                     self.user_config['drive_usage'] = self.drive_usage_dict
-                    self.SaveConfig(self.config_file)
+                    self.save_config(self.config_file)
                 except:
-                    self.driveAudioUsage = 0
-                    self.driveMoviesUsage = 0
-                    self.driveDocumentUsage = 0
-                    self.drivePhotoUsage = 0
-                    self.driveOthersUsage = 0
+                    self.audio_usage = 0
+                    self.movies_usage = 0
+                    self.document_usage = 0
+                    self.photo_usage = 0
+                    self.others_usage = 0
                     GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, -1)
             except:
                 GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, -1)
@@ -926,40 +961,25 @@ class GoSyncModel(object):
             self.calculatingDriveUsage = False
             self.sync_lock.release()
 
-    def GetDriveDirectoryTree(self):
+    def get_drive_directory_tree(self):
         self.sync_lock.acquire()
         ref_tree = copy.deepcopy(self.driveTree)
         self.sync_lock.release()
         return ref_tree
 
-    def IsCalculatingDriveUsage(self):
+    def is_calculating_drive_usage(self):
         return self.calculatingDriveUsage
 
-    def GetAudioUsage(self):
-        return self.driveAudioUsage
-
-    def GetMovieUsage(self):
-        return self.driveMoviesUsage
-
-    def GetDocumentUsage(self):
-        return self.driveDocumentUsage
-
-    def GetOthersUsage(self):
-        return self.driveOthersUsage
-
-    def GetPhotoUsage(self):
-        return self.drivePhotoUsage
-
-    def StartSync(self):
+    def start_sync(self):
         self.syncRunning.set()
 
-    def StopSync(self):
+    def stop_sync(self):
         self.syncRunning.clear()
 
-    def IsSyncEnabled(self):
+    def is_sync_enabled(self):
         return self.syncRunning.is_set()
 
-    def SetSyncSelection(self, folder):
+    def set_sync_selection(self, folder):
         if folder == 'root':
             self.sync_selection = [['root', '']]
         else:
@@ -971,9 +991,9 @@ class GoSyncModel(object):
                     return
             self.sync_selection.append([folder.GetPath(), folder.GetId()])
         self.user_config['sync_selection'] = self.sync_selection
-        self.SaveConfig(self.config_file)
+        self.save_config(self.config_file)
 
-    def GetSyncList(self):
+    def get_sync_list(self):
         return copy.deepcopy(self.sync_selection)
 
 
@@ -986,12 +1006,12 @@ class FileModificationNotifyHandler(PatternMatchingEventHandler):
 
     def on_created(self, evt):
         self.sync_handler.logger.debug("Observer: %s created\n" % evt.src_path)
-        self.sync_handler.UploadObservedFile(evt.src_path)
+        self.sync_handler.upload_observed_file(evt.src_path)
 
     def on_moved(self, evt):
         self.sync_handler.logger.info("Observer: file %s moved to %s: Not supported yet!\n" % (evt.src_path, evt.dest_path))
-        self.sync_handler.HandleMovedFile(evt.src_path, evt.dest_path)
+        self.sync_handler.handle_moved_file(evt.src_path, evt.dest_path)
 
     def on_deleted(self, evt):
         self.sync_handler.logger.info("Observer: file %s deleted on drive.\n" % evt.src_path)
-        self.sync_handler.TrashObservedFile(evt.src_path)
+        self.sync_handler.trash_observed_file(evt.src_path)
