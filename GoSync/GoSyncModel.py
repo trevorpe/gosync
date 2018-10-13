@@ -23,6 +23,7 @@ import logging
 import ntpath
 import os
 import pickle
+import random
 import threading
 import time
 import wx
@@ -72,6 +73,10 @@ class FileListQueryFailed(RuntimeError):
 
 class ConfigLoadFailed(RuntimeError):
     """Failed to load the GoSync configuration file"""
+
+
+class FileMoveFailed(RuntimeError):
+    """Failed to move a file"""
 
 
 audio_file_mimelist = ['audio/mpeg', 'audio/x-mpeg-3', 'audio/mpeg3',
@@ -630,7 +635,7 @@ class GoSyncModel(object):
                     self.logger.debug("MovingFile() ")
                     self.move_file(ftm, df, sf)
                     self.logger.debug("done\n")
-                except (Unkownerror, FileMoveFailed):
+                except (UnknownError, FileMoveFailed):
                     self.logger.error("MovedObservedFile: Failed\n")
                     return
                 except:
@@ -897,7 +902,7 @@ class GoSyncModel(object):
                 self.fcount += 1
                 GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_UPDATE, self.fcount)
                 if f['mimeType'] == google_folder_mime:
-                    self.driveTree.AddFolder(folder_id, f['id'], f['title'], f)
+                    self.driveTree.add_folder(folder_id, f['id'], f['title'], f)
                     self.calculate_usage_of_folder(f['id'])
                 else:
                     if not self.is_google_document(f):
@@ -983,13 +988,13 @@ class GoSyncModel(object):
         if folder == 'root':
             self.sync_selection = [['root', '']]
         else:
-            for d in self.sync_selection:
-                if d[0] == 'root':
+            for path, id_ in self.sync_selection:
+                if path == 'root':
                     self.sync_selection = []
-            for d in self.sync_selection:
-                if d[0] == folder.GetPath() and d[1] == folder.GetId():
+            for path, id_ in self.sync_selection:
+                if path == folder.get_path() and id_ == folder.id:
                     return
-            self.sync_selection.append([folder.GetPath(), folder.GetId()])
+            self.sync_selection.append([folder.get_path(), folder.id])
         self.user_config['sync_selection'] = self.sync_selection
         self.save_config(self.config_file)
 

@@ -80,9 +80,9 @@ class SettingsPage(wx.Panel):
         self.sync_model.set_sync_selection(folder)
 
     def MakeDriveTree(self, gnode, tnode):
-        file_list = gnode.GetChildren()
+        file_list = gnode.children
         for f in file_list:
-            nnode = self.dstc.AppendItem(tnode, f.GetName(), ct_type=1)
+            nnode = self.dstc.AppendItem(tnode, f.name, ct_type=1)
             self.dstc.SetPyData(nnode, f)
             self.MakeDriveTree(f, nnode)
 
@@ -99,7 +99,7 @@ class SettingsPage(wx.Panel):
         while child:
             child_data = self.dstc.GetPyData(child)
             for d in checklist:
-                if child_data.GetId() == d[1]:
+                if child_data.id == d[1]:
                     itemToBeChecked.append(child)
 
             itemToBeChecked = self.GetItemsToBeChecked(checklist, child,
@@ -112,7 +112,7 @@ class SettingsPage(wx.Panel):
         driveTree = self.sync_model.get_drive_directory_tree()
         self.dstc.DeleteAllItems()
         self.dstc_root = self.dstc.AddRoot("Google Drive Root")
-        self.MakeDriveTree(driveTree.GetRoot(), self.dstc_root)
+        self.MakeDriveTree(driveTree.root_node, self.dstc_root)
         self.dstc.ExpandAll()
         sync_list = self.sync_model.get_sync_list()
         for d in sync_list:
