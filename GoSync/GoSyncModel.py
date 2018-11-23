@@ -26,7 +26,6 @@ import pickle
 import random
 import threading
 import time
-import wx
 
 from GoSyncDriveTree import GoogleDriveTree
 from GoSyncEvents import *
@@ -120,6 +119,17 @@ class GoSyncModel(object):
         self.account_dict = {}
         self.drive_usage_dict = {}
 
+        # Setup logger
+        self.logger = logging.getLogger(APP_NAME)
+        self.logger.setLevel(logging.DEBUG)
+        fh = logging.FileHandler(os.path.join(os.environ['HOME'], 'GoSync.log'))
+        fh.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        fh.setFormatter(formatter)
+        self.logger.addHandler(fh)
+
         # Set paths and create directories
         self.configure_authentication_files()
 
@@ -127,7 +137,7 @@ class GoSyncModel(object):
         self.observer = Observer()
         self.do_authenticate(self.settings_file)
 
-        self.about_drive = self.authToken.service.about().get().execute()
+        self.about_drive = self.drive.GetAbout()
         self.user_email = self.about_drive['user']['emailAddress']
 
         # Load GoSync configuration
@@ -146,34 +156,26 @@ class GoSyncModel(object):
         if not os.path.exists(self.mirror_directory):
             os.mkdir(self.mirror_directory, 0755)
 
-        self.tree_pickle_file = os.path.join(self.config_path,
-                                             'gtree-%s.pick' % self.user_email)
-
         self.iobserv_handle = self.observer.schedule(
             FileModificationNotifyHandler(self),
             self.mirror_directory,
             recursive=True
         )
 
+        # Setup thread objects
         self.sync_lock = threading.Lock()
-        self.sync_thread = threading.Thread(target=self.run)
-        self.usage_calc_thread = threading.Thread(target=self.calculate_usage)
-        self.sync_thread.daemon = True
-        self.usage_calc_thread.daemon = True
         self.syncRunning = threading.Event()
-        self.syncRunning.clear()
+        self.syncRunning.set()
         self.usageCalculateEvent = threading.Event()
         self.usageCalculateEvent.set()
 
-        self.logger = logging.getLogger(APP_NAME)
-        self.logger.setLevel(logging.DEBUG)
-        fh = logging.FileHandler(os.path.join(os.environ['HOME'], 'GoSync.log'))
-        fh.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        fh.setFormatter(formatter)
-        self.logger.addHandler(fh)
+        self.sync_thread = threading.Thread(target=self.run)
+        self.sync_thread.daemon = True
+        self.usage_calc_thread = threading.Thread(target=self.calculate_usage)
+        self.usage_calc_thread.daemon = True
+
+        # Load the drive tree
+        self.tree_pickle_file = os.path.join(self.config_path, 'gtree-%s.pkl' % self.user_email)
         if not os.path.exists(self.tree_pickle_file):
             self.driveTree = GoogleDriveTree()
         else:
@@ -242,22 +244,25 @@ class GoSyncModel(object):
         self.drive_usage_dict['others_size'] = value
 
     def configure_authentication_files(self):
+        self.logger.debug('configure_authentication_files()')
         self.config_path = os.path.join(os.environ['HOME'], ".gosync")
         if not os.path.exists(self.config_path):
+            self.logger.info('Creating configuration path at "%s"', self.config_path)
             os.mkdir(self.config_path, 0755)
+            self.logger.error('no client secrets')
             raise ClientSecretsNotFound()
 
         self.client_secret_file = os.path.join(self.config_path,
                                                'client_secrets.json')
         if not os.path.exists(self.client_secret_file):
+            self.logger.error('no client secrets')
             raise ClientSecretsNotFound()
 
-        self.credential_file = os.path.join(self.config_path,
-                                            "credentials.json")
+        self.credential_file = os.path.join(self.config_path, "credentials.json")
         self.settings_file = os.path.join(self.config_path, "settings.yaml")
         if not os.path.isfile(self.settings_file):
+            self.logger.info('Creating default settings file')
             self.create_default_settings_file()
-
 
     def is_user_logged_in(self):
         return self.is_logged_in
@@ -320,18 +325,17 @@ class GoSyncModel(object):
             json.dump(self.config, f)
 
     def do_authenticate(self, settings_file):
+        self.logger.info('Authenticating...')
         try:
             self.authToken = GoogleAuth(settings_file)
             self.authToken.LocalWebserverAuth()
             self.drive = GoogleDrive(self.authToken)
             self.is_logged_in = True
+            self.logger.info('Authentication successful.')
         except:
-            dial = wx.MessageDialog(None,
-                                    "Authentication Rejected!\n",
-                                    'Information',
-                                    wx.OK | wx.ICON_EXCLAMATION)
-            dial.ShowModal()
+            self.logger.error('Authentication rejected!')
             self.is_logged_in = False
+            raise
 
     def do_unauthenticate(self):
             self.do_sync = False
@@ -460,16 +464,10 @@ class GoSyncModel(object):
                     errorMsg = ("Failed to locate directory path %s on drive."
                                 "\n" % basepath)
                     self.logger.error(errorMsg)
-                    dial = wx.MessageDialog(None, errorMsg, 'Directory Not Found',
-                                            wx.ID_OK | wx.ICON_EXCLAMATION)
-                    dial.ShowModal()
                     return
         except FileListQueryFailed:
             errorMsg = "Server Query Failed!\n"
             self.logger.error(errorMsg)
-            dial = wx.MessageDialog(None, errorMsg, 'Directory Not Found',
-                                    wx.ID_OK | wx.ICON_EXCLAMATION)
-            dial.ShowModal()
             return
 
     def create_regular_file(self, file_path, parent='root', uploaded=False):
@@ -726,7 +724,7 @@ class GoSyncModel(object):
         else:
             self.logger.info('Downloading %s ' % abs_filepath)
             fd = abs_filepath.split(self.mirror_directory + '/')[1]
-            GoSyncEventController().PostEvent(GOSYNC_EVENT_SYNC_UPDATE,
+            GoSyncEventController().notify_listeners(GOSYNC_EVENT_SYNC_UPDATE,
                                               {'Downloading %s' % fd})
             dfile.GetContentFile(abs_filepath)
             self.updates_done = 1
@@ -821,11 +819,11 @@ class GoSyncModel(object):
                         os.remove(dirpath)
 
     def validate_sync_settings(self):
-        for d in self.sync_selection:
-            if d[0] != 'root':
+        for path, id_ in self.sync_selection:
+            if path != 'root':
                 try:
-                    f = self.locate_folder_on_drive(d[0])
-                    if f['id'] != d[1]:
+                    f = self.locate_folder_on_drive(path)
+                    if f['id'] != id_:
                         raise FolderNotFound()
                     break
                 except FolderNotFound:
@@ -833,10 +831,11 @@ class GoSyncModel(object):
                 except:
                     raise FolderNotFound()
             else:
-                if d[1] != '':
+                if id_ != '':
                     raise FolderNotFound()
 
     def run(self):
+        import pudb; pudb.set_trace()
         while True:
             self.syncRunning.wait()
 
@@ -845,19 +844,19 @@ class GoSyncModel(object):
             try:
                 self.validate_sync_settings()
             except:
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_SYNC_INV_FOLDER, 0)
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_SYNC_INV_FOLDER, 0)
                 self.syncRunning.clear()
                 self.sync_lock.release()
                 continue
 
             try:
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_SYNC_STARTED, None)
-                for d in self.sync_selection:
-                    self.logger.info("Syncing remote (%s)... " % d[0])
-                    if d[0] != 'root':
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_SYNC_STARTED, None)
+                for path, id_ in self.sync_selection:
+                    self.logger.info("Syncing remote (%s)... " % path)
+                    if path != 'root':
                         # Root folder files are always synced
                         self.sync_remote_directory('root', '', False)
-                        self.sync_remote_directory(d[1], d[0])
+                        self.sync_remote_directory(id_, path)
                     else:
                         self.sync_remote_directory('root', '')
                     self.logger.info("done\n")
@@ -866,16 +865,16 @@ class GoSyncModel(object):
                 self.logger.info("done\n")
                 if self.updates_done:
                     self.usageCalculateEvent.set()
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_SYNC_DONE, 0)
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_SYNC_DONE, 0)
             except:
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_SYNC_DONE, -1)
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_SYNC_DONE, -1)
 
             self.sync_lock.release()
 
             time_left = 600
 
             while (time_left):
-                GoSyncEventController().PostEvent(
+                GoSyncEventController().notify_listeners(
                     GOSYNC_EVENT_SYNC_TIMER,
                     {'Sync starts in %02dm:%02ds' % ((time_left / 60),
                                                      (time_left % 60))}
@@ -900,7 +899,7 @@ class GoSyncModel(object):
             )
             for f in file_list:
                 self.fcount += 1
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_UPDATE, self.fcount)
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_CALCULATE_USAGE_UPDATE, self.fcount)
                 if f['mimeType'] == google_folder_mime:
                     self.driveTree.add_folder(folder_id, f['id'], f['title'], f)
                     self.calculate_usage_of_folder(f['id'])
@@ -927,7 +926,7 @@ class GoSyncModel(object):
 
             self.sync_lock.acquire()
             if self.drive_usage_dict and not self.updates_done:
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, 0)
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_CALCULATE_USAGE_DONE, 0)
                 self.sync_lock.release()
                 continue
 
@@ -942,11 +941,11 @@ class GoSyncModel(object):
             try:
                 self.number_of_files = self.get_total_files_in_drive()
                 self.logger.info("Total files to check %d\n" % self.number_of_files)
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_STARTED,
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_CALCULATE_USAGE_STARTED,
                                                   self.number_of_files)
                 try:
                     self.calculate_usage_of_folder('root')
-                    GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, 0)
+                    GoSyncEventController().notify_listeners(GOSYNC_EVENT_CALCULATE_USAGE_DONE, 0)
                     self.total_size = long(self.about_drive['quotaBytesTotal'])
                     with open(self.tree_pickle_file, "wb") as tree_file:
                         pickle.dump(self.driveTree, tree_file)
@@ -958,9 +957,9 @@ class GoSyncModel(object):
                     self.document_usage = 0
                     self.photo_usage = 0
                     self.others_usage = 0
-                    GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, -1)
+                    GoSyncEventController().notify_listeners(GOSYNC_EVENT_CALCULATE_USAGE_DONE, -1)
             except:
-                GoSyncEventController().PostEvent(GOSYNC_EVENT_CALCULATE_USAGE_DONE, -1)
+                GoSyncEventController().notify_listeners(GOSYNC_EVENT_CALCULATE_USAGE_DONE, -1)
                 self.logger.error("Failed to get the total number of files in drive\n")
 
             self.calculatingDriveUsage = False

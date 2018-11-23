@@ -52,7 +52,7 @@ class SettingsPage(wx.Panel):
         btn.Bind(wx.EVT_BUTTON, self.RefreshTree)
         self.Bind(CT.EVT_TREE_ITEM_CHECKED, self.ItemChecked)
 
-        GoSyncEventController().BindEvent(self,
+        GoSyncEventController().register_listener(self,
                                           GOSYNC_EVENT_CALCULATE_USAGE_DONE,
                                           self.RefreshTree)
         wx.EVT_CHECKBOX(self, self.cb.GetId(), self.SyncSetting)
